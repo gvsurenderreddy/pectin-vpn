@@ -1,0 +1,14 @@
+{% set title='Login' %}
+{% extends 'master.html' %}
+
+{% block content %}
+  <form method="POST" action="login">
+    Username: <input name="username"></input><br/>
+    Password: <input type="password" name="password"></input>
+    <input type="submit" value="Login"></input>
+    {% if failure %}
+      <p>Login Failure</p>
+    {% endif %}
+  </form>
+  <p><a href="create_user">Create A New User</a></p>
+{% endblock %}

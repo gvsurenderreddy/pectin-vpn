@@ -1,0 +1,37 @@
+{% set title='Admin Panel' %}
+{% extends 'master.html' %}
+
+{% block content %}
+  <div id="users">
+    <p>Users</p>
+    <table border=1>
+      <tr>
+        <th>Username</th>
+        <th>Status</th>
+        <th>IP</th>
+      {% for user in g.users %}
+        <tr>
+          <td>{{ user.username }}</td>
+          <td>{{ user.status }}</td>
+          <td>{{ user.vpn_ip }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div id="config">
+    <p>Config</p>
+    <table border=1>
+      <tr>
+        <th>Key</th>
+        <th>Value</th>
+      </tr>
+      {% for key in g.config %}
+        <tr>
+          <td>{{ key }}</td>
+          <td style="font-family:monospace">{{ g.config[key] | replace('\n', '<br/>') | safe }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+{% endblock %}

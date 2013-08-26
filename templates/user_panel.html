@@ -1,0 +1,9 @@
+{% set title='User Panel' %}
+{% extends 'master.html' %}
+
+{% block content %}
+  <p>Hello, {{ username }}. Download your VPN keys below.</p>
+  <form action="user/keys">
+    <input type="submit" value="Download Keys"></input>
+  </form>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% set title='Create User' %}
+{% extends 'master.html' %}
+
+{% block content %}
+  <form method="POST" action="/create_user">
+    <input name="username"></input>
+    <input name="password"></input>
+    <input type="submit" value="Create User"></input>
+  </form>
+{% endblock %}
