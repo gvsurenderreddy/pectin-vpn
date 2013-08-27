@@ -12,6 +12,24 @@ DATABASE = 'users.db'
 def get_db():
     return sqlite3.connect(DATABASE)
 
+if not os.path.isfile(DATABASE):
+    db = get_db()
+    c = db.cursor()
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS config (
+        key TEXT PRIMARY KEY,
+        value BLOB
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        pass_hash BLOB, pass_salt BLOB,
+        key BLOB, cert BLOB
+    )
+    ''')
+    db.commit()
+
 class Config(object):
 
     def __init__(self):
@@ -28,7 +46,10 @@ class Config(object):
 
     def __setitem__(self, key, value):
         c = g.db.cursor()
-        c.execute("INSERT INTO config (key, value) VALUES (?, ?)", (key, value))
+        if key in self._cache:
+            c.execute("UPDATE config SET value=? WHERE key=?", (value, key))
+        else:
+            c.execute("INSERT INTO config (key, value) VALUES (?, ?)", (key, value))
         g.db.commit()
         self._cache[key] = value
 
@@ -69,13 +90,6 @@ class User(object):
             return (str(pass_hash) == scrypt.hash(password.encode('utf-8'), str(pass_salt)))
         return False
 
-    def revoke_keys(self):
-        # TODO
-        pass
-
-    def generate_keys(self, password):
-        c = g.db.cursor()
-
 class Users(object):
     
     def __init__(self):
@@ -110,26 +124,24 @@ class Users(object):
         pass_salt = os.urandom(8)
         pass_hash = scrypt.hash(password.encode('utf-8'), pass_salt)
         user_key = pki.make_key(password=password)
+        user_cert = pki.make_cert(user_key, username+'.'+g.config['vpn_name'],
+                                  g.config['ca_key'], g.config['ca_cert'], 
+                                  key_password=password)
         c = g.db.cursor()
         c.execute('''
-        INSERT INTO users (username, pass_hash, pass_salt, private_key)
-        VALUES (?, ?, ?, ?)
-        ''', (username, buffer(pass_hash), buffer(pass_salt), user_key)
+        INSERT INTO users (username, pass_hash, pass_salt, key, cert)
+        VALUES (?, ?, ?, ?, ?)
+        ''', (username, buffer(pass_hash), buffer(pass_salt), user_key, user_cert)
         )
         g.db.commit()
         self._user_list.append(username)
         return True
 
-def init():
+def destroy_users():
     c = g.db.cursor()
+    c.execute("DROP TABLE users")
     c.execute('''
-    CREATE TABLE IF NOT EXISTS config (
-        key TEXT PRIMARY KEY,
-        value BLOB
-    )
-    ''')
-    c.execute('''
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE users (
         username TEXT PRIMARY KEY,
         pass_hash BLOB, pass_salt BLOB,
         key BLOB, cert BLOB
@@ -137,13 +149,27 @@ def init():
     ''')
     g.db.commit()
 
-def configure(host, port, name):
+def configure_vpn(host, proto, port):
+    if 'vpn_state' in g.config and g.config['vpn_state'] == 'running':
+        raise ValueError, 'cannot configure running VPN'
     g.config['vpn_host'] = host
+    g.config['vpn_proto'] = proto
     g.config['vpn_port'] = port
+    if 'server_cert' in g.config:
+        g.config['vpn_state'] = 'ready'
+    else:
+        g.config['vpn_state'] = 'no_pki'
+
+def configure_pki(name, keylen=2048):
+    if 'vpn_state' in g.config and g.config['vpn_state'] == 'running':
+        raise ValueError, 'cannot regen keys for running VPN'
     g.config['vpn_name'] = name
-    
-def init_ca():
-    return
-    if 'ca_key' in g.config and 'ca_cert' in g.config:
-        return
-    g.config['ca_key'], g.config['ca_cert'] = pki.make_ca(g.config['vpn_name'])
+    ca_key, ca_cert = pki.make_ca(name, keylen=keylen)
+    server_key = pki.make_key()
+    server_cert = pki.make_cert(server_key, 'server.%s' % name, ca_key, ca_cert)
+    g.config['ca_key'] = ca_key
+    g.config['ca_cert'] = ca_cert
+    g.config['server_key'] = server_key
+    g.config['server_cert'] = server_cert
+    if 'server_dhparam' not in g.config:
+        g.config['server_dhparam'] = pki.make_dhparam()
